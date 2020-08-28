@@ -19,22 +19,14 @@ std::vector<Real> sample_gaussian(const std::vector<Real> & eigvals,
                                   const std::vector<std::vector<Real>> & eigvecs,
                                   std::default_random_engine & generator);
 
-void compute_correlated_Gamma_fields(const std::vector<Real> & Xi_1,
-                                     const std::vector<Real> & Xi_2,
-                                     std::vector<Real> & P_1,
-                                     Real mean_1,
-                                     Real CV_1,
-                                     std::vector<Real> & P_2,
-                                     Real mean_2,
-                                     Real CV_2,
-                                     Real rho);
+void gaussian_to_gamma(const std::vector<Real> & Xi, std::vector<Real> & P, Real mean, Real cv);
 
 int
 main(int argc, char ** argv)
 {
   // Check for proper usage.
-  if (argc != 1)
-    libmesh_error_msg("\nUsage: " << argv[0]);
+  if (argc % 3 != 1)
+    libmesh_error_msg("\nUsage: " << argv[0] << " field_name field_mean field_cv ...");
 
   // Initialize libMesh and the dependent libraries.
   LibMeshInit init(argc, argv);
@@ -65,24 +57,39 @@ main(int argc, char ** argv)
     eigvecs.push_back(basis_helper.nodal_var_values);
   }
 
-  // sample Gaussian fields
+  // random engine
   std::default_random_engine generator;
   generator.seed(std::time(NULL));
-  std::vector<Real> Xi_1 = sample_gaussian(eigvals, eigvecs, generator);
-  std::vector<Real> Xi_2 = sample_gaussian(eigvals, eigvecs, generator);
 
-  // transform to marginal Gamma fields
-  std::vector<Real> Gc;
-  std::vector<Real> psic;
-  compute_correlated_Gamma_fields(Xi_1, Xi_2, Gc, 8e-4, 0.03, psic, 3e-5, 0.03, 0);
+  // number of fields to sample
+  int num_fields = (argc - 1) / 3;
+  std::vector<std::vector<Real>> fields(num_fields);
+  std::vector<std::string> field_names(num_fields);
+
+  // sample each field
+  for (int i = 0; i < num_fields; i++)
+  {
+    // read in arguments
+    field_names[i] = argv[3 * i + 1];
+    Real mean = strtod(argv[3 * i + 2], nullptr);
+    Real cv = strtod(argv[3 * i + 3], nullptr);
+    libMesh::out << "Sampling field " << field_names[i] << ", mean = " << mean << ", CV = " << cv
+                 << std::endl;
+
+    // sample Gaussian fields
+    std::vector<Real> Xi = sample_gaussian(eigvals, eigvecs, generator);
+
+    // transform to marginal Gamma fields
+    gaussian_to_gamma(Xi, fields[i], mean, cv);
+  }
 
   // write random field
-  ExodusII_IO fields(mesh);
-  fields.write("fields.e");
-  ExodusII_IO_Helper & fields_helper = fields.get_exio_helper();
-  fields_helper.initialize_nodal_variables({"Gc", "psic"});
-  fields_helper.write_nodal_values(1, Gc, 1);
-  fields_helper.write_nodal_values(2, psic, 1);
+  ExodusII_IO mesh_with_random_fields(mesh);
+  mesh_with_random_fields.write("fields.e");
+  ExodusII_IO_Helper & fields_helper = mesh_with_random_fields.get_exio_helper();
+  fields_helper.initialize_nodal_variables(field_names);
+  for (int i = 0; i < num_fields; i++)
+    fields_helper.write_nodal_values(i + 1, fields[i], 1);
 
   return EXIT_SUCCESS;
 }
@@ -107,42 +114,21 @@ sample_gaussian(const std::vector<Real> & eigvals,
 }
 
 void
-compute_correlated_Gamma_fields(const std::vector<Real> & Xi_1,
-                                const std::vector<Real> & Xi_2,
-                                std::vector<Real> & P_1,
-                                Real mean_1,
-                                Real CV_1,
-                                std::vector<Real> & P_2,
-                                Real mean_2,
-                                Real CV_2,
-                                Real rho)
+gaussian_to_gamma(const std::vector<Real> & Xi, std::vector<Real> & P, Real mean, Real cv)
 {
-  unsigned int ndof = Xi_1.size();
+  unsigned int ndof = Xi.size();
 
   // Normal distribution
   auto normal = boost::math::normal_distribution<Real>(0, 1);
 
-  // Gamma distribution for the first field
-  Real std_1 = CV_1 * mean_1;
-  Real var_1 = std_1 * std_1;
-  Real theta_1 = var_1 / mean_1;
-  Real k_1 = mean_1 / theta_1;
+  // Gamma distribution
+  Real std = cv * mean;
+  Real var = std * std;
+  Real theta = var / mean;
+  Real k = mean / theta;
 
-  // Gamma distribution for the second field
-  Real std_2 = CV_2 * mean_2;
-  Real var_2 = std_2 * std_2;
-  Real theta_2 = var_2 / mean_2;
-  Real k_2 = mean_2 / theta_2;
-
-  // Transform into the first field
-  P_1.resize(ndof);
+  // Transform into the field
+  P.resize(ndof);
   for (unsigned int i = 0; i < ndof; i++)
-    P_1[i] = theta_1 * boost::math::gamma_p_inv<Real, Real>(k_1, boost::math::cdf(normal, Xi_1[i]));
-
-  // Transform into the first field
-  P_2.resize(ndof);
-  for (unsigned int i = 0; i < ndof; i++)
-    P_2[i] = theta_2 *
-             boost::math::gamma_p_inv<Real, Real>(
-                 k_2, boost::math::cdf(normal, rho * Xi_1[i] + std::sqrt(1 - rho * rho) * Xi_2[i]));
+    P[i] = theta * boost::math::gamma_p_inv<Real, Real>(k, boost::math::cdf(normal, Xi[i]));
 }

@@ -67,14 +67,16 @@ private:
   Real _c;
 };
 
-Real
-covariance_sqexp(const Point & p1, const Point & p2, Real L)
+class SE
 {
-  // R = exp(-pi*tau^2/(4*L^2))
-  Point dist = p1 - p2;
-  Real tau = dist.norm();
-  return std::exp(-M_PI * tau * tau / 4 / L / L);
-}
+public:
+  SE(Real L) : _L(L) {}
+
+  Real covariance(Real tau) { return std::exp(-M_PI * tau * tau / 4 / _L / _L); }
+
+private:
+  Real _L;
+};
 
 Real
 covariance_exp(const Point & p1, const Point & p2, Real L)
