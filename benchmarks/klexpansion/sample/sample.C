@@ -26,7 +26,9 @@ main(int argc, char ** argv)
 {
   // Check for proper usage.
   if (argc % 3 != 1)
-    libmesh_error_msg("\nUsage: " << argv[0] << " field_name field_mean field_cv ...");
+    libmesh_error_msg(
+        "\nUsage: " << argv[0]
+                    << " in_file out_file num_samples field_name field_mean field_cv ...");
 
   // Initialize libMesh and the dependent libraries.
   LibMeshInit init(argc, argv);
@@ -36,14 +38,14 @@ main(int argc, char ** argv)
 
   // Read the mesh
   Mesh mesh(init.comm());
-  mesh.read("basis.e");
+  mesh.read(argv[1]);
 
   // Read the eigenpairs
   std::vector<Real> eigvals;
   std::vector<std::vector<Real>> eigvecs;
 
   ExodusII_IO basis(mesh);
-  basis.read("basis.e");
+  basis.read(argv[1]);
   ExodusII_IO_Helper & basis_helper = basis.get_exio_helper();
   for (int i = 1; i < basis.get_num_time_steps(); i++)
   {
@@ -57,39 +59,50 @@ main(int argc, char ** argv)
     eigvecs.push_back(basis_helper.nodal_var_values);
   }
 
-  // random engine
-  std::default_random_engine generator;
-  generator.seed(std::time(NULL));
-
   // number of fields to sample
-  int num_fields = (argc - 1) / 3;
-  std::vector<std::vector<Real>> fields(num_fields);
+  int num_fields = (argc - 4) / 3;
   std::vector<std::string> field_names(num_fields);
+  std::vector<Real> field_means(num_fields);
+  std::vector<Real> field_cvs(num_fields);
 
-  // sample each field
+  // read parameters
   for (int i = 0; i < num_fields; i++)
   {
     // read in arguments
-    field_names[i] = argv[3 * i + 1];
-    Real mean = strtod(argv[3 * i + 2], nullptr);
-    Real cv = strtod(argv[3 * i + 3], nullptr);
-    libMesh::out << "Sampling field " << field_names[i] << ", mean = " << mean << ", CV = " << cv
-                 << std::endl;
-
-    // sample Gaussian fields
-    std::vector<Real> Xi = sample_gaussian(eigvals, eigvecs, generator);
-
-    // transform to marginal Gamma fields
-    gaussian_to_gamma(Xi, fields[i], mean, cv);
+    field_names[i] = argv[3 * i + 4];
+    Real mean = strtod(argv[3 * i + 5], nullptr);
+    Real cv = strtod(argv[3 * i + 6], nullptr);
+    field_means[i] = mean;
+    field_cvs[i] = cv;
   }
 
   // write random field
   ExodusII_IO mesh_with_random_fields(mesh);
-  mesh_with_random_fields.write("fields.e");
+  mesh_with_random_fields.write(argv[2]);
   ExodusII_IO_Helper & fields_helper = mesh_with_random_fields.get_exio_helper();
   fields_helper.initialize_nodal_variables(field_names);
-  for (int i = 0; i < num_fields; i++)
-    fields_helper.write_nodal_values(i + 1, fields[i], 1);
+
+  // random engine
+  std::default_random_engine generator;
+  generator.seed(std::time(NULL));
+
+  int num_samples = std::stoi(argv[3]);
+  std::vector<Real> field;
+  for (int n = 0; n < num_samples; n++)
+  {
+    // sample each field
+    for (int i = 0; i < num_fields; i++)
+    {
+      libMesh::out << "Sampling field " << field_names[i] << " sample #" << n + 1
+                   << ": mean = " << field_means[i] << ", cv = " << field_cvs[i] << std::endl;
+      // sample Gaussian fields
+      std::vector<Real> Xi = sample_gaussian(eigvals, eigvecs, generator);
+      // transform to marginal Gamma fields
+      gaussian_to_gamma(Xi, field, field_means[i], field_cvs[i]);
+      fields_helper.write_nodal_values(i + 1, field, n + 1);
+      fields_helper.write_timestep(n + 1, n + 1);
+    }
+  }
 
   return EXIT_SUCCESS;
 }

@@ -203,8 +203,8 @@ assembly(EquationSystems & es)
   const std::vector<Point> & q_points_remote = fe_remote->get_xyz();
 
   // Before we do the element loop, construct a covariance kernel
-  SE covariance_x(2);
-  SE covariance_y(2);
+  SE covariance_x(5);
+  SE covariance_y(5);
 
   // Now we will loop over all the elements in the mesh that
   // live on the local processor. We will compute the element
