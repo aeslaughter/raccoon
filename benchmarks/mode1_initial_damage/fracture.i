@@ -4,71 +4,72 @@
 []
 
 [Variables]
-  [./d]
-  [../]
+  [d]
+  []
 []
 
 [AuxVariables]
-  [./load]
+  [load]
     family = SCALAR
-  [../]
-  [./E_el]
+  []
+  [E_el]
     order = CONSTANT
     family = MONOMIAL
-  [../]
-  [./d_ref]
-  [../]
-  [./bounds_dummy]
-  [../]
+  []
+  [d_ref]
+  []
+  [bounds_dummy]
+  []
 []
 
 [Bounds]
-  [./irreversibility]
-    type = VariableOldValueBoundsAux
+  [irreversibility]
+    type = CoupledBoundsAux
     variable = 'bounds_dummy'
     bounded_variable = 'd'
     bound_type = lower
-  [../]
-  [./upper]
+    coupled_variable = 'd_ref'
+  []
+  [upper]
     type = ConstantBoundsAux
     variable = 'bounds_dummy'
     bounded_variable = 'd'
     bound_type = upper
     bound_value = 1
-  [../]
+  []
 []
 
 [Kernels]
-  [./react]
+  [react]
     type = ADPFFReaction
     variable = 'd'
     driving_energy_var = 'E_el'
-  [../]
-  [./diff]
+  []
+  [diff]
     type = ADPFFDiffusion
     variable = 'd'
-  [../]
+  []
 []
 
 [Materials]
-  [./fracture_energy_barrier]
-    type = GenericFunctionMaterial
+  [fracture_energy_barrier]
+    type = ADGenericFunctionMaterial
     prop_names = 'energy_release_rate phase_field_regularization_length critical_fracture_energy'
     prop_values = '${Gc} ${l} ${psic}'
-  [../]
-  [./local_dissipation]
+  []
+  [local_dissipation]
     type = LinearLocalDissipation
     d = d
-  [../]
-  [./fracture_properties]
-    type = FractureMaterial
+  []
+  [fracture_properties]
+    type = ADFractureMaterial
     local_dissipation_norm = 8/3
-  [../]
-  [./degradation]
+  []
+  [degradation]
     type = LorentzDegradation
     d = d
     residual_degradation = ${k}
-  [../]
+  []
 []
 
 [Executioner]
@@ -84,9 +85,11 @@
 
 [Outputs]
   print_linear_residuals = false
-  [./console]
+  print_linear_converged_reason = false
+  print_nonlinear_converged_reason = false
+  [console]
     type = Console
     hide = 'load'
     outlier_variable_norms = false
-  [../]
+  []
 []

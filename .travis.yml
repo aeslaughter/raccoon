@@ -51,7 +51,7 @@ install:
   - export RACCOON_DIR=`pwd`
   - export PATH=$HOME/miniconda3/bin:$PATH
   - conda config --add channels conda-forge
-  - conda config --add channels https://mooseframework.org/conda/moose
+  - conda config --add channels idaholab
   - conda create -y --name moose moose-libmesh moose-tools
 script:
   - conda activate moose
